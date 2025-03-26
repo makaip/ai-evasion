@@ -1,5 +1,13 @@
 
 
+# AI Detection
+
+
+To run the stuff idk
+
+```
+clear && sbatch --nodelist=nodegpu031 job_script.sh && echo -e "\n\n" && sleep 1 && squeue -u $USER && echo -e "\n\n" && sleep 1 && tail -f output.txt
+```
 
 
 
@@ -10,9 +18,16 @@ sinfo -o "%P %N %G"
 ```
 
 
+sbatch: error: Batch script contains DOS line breaks (\r\n)
+
+
+
+
 ```
-clear && sbatch --nodelist=nodegpu031 job_script.sh && squeue -u $USER && echo "\n\n" && tail -f output.txt
+sed -i 's/\r//' job_script.sh
 ```
+
+
 
 ```
 srun --nodelist=nodegpu031 --ntasks=1 --cpus-per-task=8 --mem=64G --time=06:00:00 --partition=shortq7-gpu --pty bash
