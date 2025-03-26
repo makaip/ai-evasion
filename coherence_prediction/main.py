@@ -7,6 +7,7 @@ from torch.utils.data import Dataset, DataLoader, random_split
 from transformers import BertTokenizer, BertForSequenceClassification, AdamW
 from nltk.corpus import gutenberg, words
 from nltk.tokenize import word_tokenize
+from torch.optim import AdamW
 import logging
 
 # Set up logging for detailed experiment-level information
