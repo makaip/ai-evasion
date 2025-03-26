@@ -289,7 +289,7 @@ def main():
     model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=2)
     
     # Train the model
-    train_model(model, dataset, epochs=3, batch_size=16)
+    train_model(model, dataset, epochs=30, batch_size=16)
     
     # Save the fine-tuned model and tokenizer for reproducibility and future use
     model_save_path = "unsupervised_coherence_model"

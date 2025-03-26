@@ -9,8 +9,16 @@
 #SBATCH --partition=shortq7-gpu         # GPU partition name (specific to your cluster)
 #SBATCH --gres=gpu:1                    # Number of GPUs
 
-# Load necessary modules
-module load cuda/11.8
+scontrol show job $SLURM_JOB_ID
+
+module load cuda/12.4.0-gcc-13.2.0-shyinv2
+module load anaconda3/2023.09-0-gcc-13.2.0-dmzia4k
+
+conda activate aidetection
+
+conda install -y pytorch torchvision torchaudio cpuonly -c pytorch
+pip install -U transformers nltk numpy && python -m nltk.downloader punkt words gutenberg
+python -c "import nltk, torch, numpy, transformers; print('All packages installed successfully!')"
 
 # Debug: Show available GPUs
 echo "Checking GPU availability..."
@@ -18,9 +26,6 @@ nvidia-smi
 
 # Debug: Verify PyTorch detects the GPU
 python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'GPU Count: {torch.cuda.device_count()}')"
-
-# Installing Nessecary Packages
-pip install -U torch numpy transformers nltk
 
 # Run the Python script
 python ./coherence_prediction/main.py
