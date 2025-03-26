@@ -5,7 +5,7 @@
 #SBATCH --ntasks=1                      # Number of tasks
 #SBATCH --cpus-per-task=8               # CPU cores per task
 #SBATCH --mem=64G                       # Memory allocation
-#SBATCH --time=02:00:00                 # Time limit
+#SBATCH --time=06:00:00                 # Time limit
 #SBATCH --partition=shortq7-gpu         # GPU partition name (specific to your cluster)
 #SBATCH --gres=gpu:1                    # Number of GPUs
 
@@ -24,3 +24,5 @@ pip install -U torch numpy transformers nltk
 
 # Run the Python script
 python ./coherence_prediction/main.py
+
+echo "All done!"
