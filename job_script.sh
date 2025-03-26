@@ -23,4 +23,4 @@ python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); 
 pip install -U torch numpy transformers nltk
 
 # Run the Python script
-python main.py
+python ./coherence_prediction/main.py
