@@ -6,7 +6,8 @@
 To run the stuff idk
 
 ```
-clear && sbatch --nodelist=nodegpu031 job_script.sh && echo -e "\n\n" && sleep 1 && squeue -u $USER && echo -e "\n\n" && sleep 1 && tail -f output.txt
+clear && sbatch job_script.sh && echo -e "\n\n" && sleep 1 && squeue -u $USER && echo -e "\n\n" && sleep 1 && tail -f output.txt
+sbatch job_script.sh
 ```
 
 list available nodes
@@ -20,7 +21,7 @@ squeue -o "%.18i %.9P %.20j %.8u %.8T %.10M %.10l %.6D %R"
 start an interactive session
 
 ```
-srun --nodelist=nodegpu031 --ntasks=1 --cpus-per-task=8 --mem=64G --time=06:00:00 --partition=shortq7-gpu --pty bash
+srun --ntasks=1 --cpus-per-task=8 --mem=64G --time=06:00:00 --partition=shortq7-gpu --pty bash
 ```
 
 cancel a job
@@ -68,7 +69,7 @@ Install Packages*
 ```
 conda install pytorch numpy scikit-learn tqdm -c pytorch
 pip install transformers nltk datasets && python -m nltk.downloader punkt words gutenberg
-python -c "import nltk, torch, numpy, transformers; print('All packages installed successfully!')"
+python -c "import nltk, torch, numpy, transformers; print('All packages installed successfully')"
 ```
 
 ## Troubleshooting

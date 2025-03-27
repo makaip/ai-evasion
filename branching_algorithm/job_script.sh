@@ -4,10 +4,10 @@
 #SBATCH --error=error.txt
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --time=05:30:00
 #SBATCH --partition=shortq7-gpu
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:4
 
 # Display job details
 scontrol show job $SLURM_JOB_ID

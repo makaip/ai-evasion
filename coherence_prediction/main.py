@@ -274,7 +274,7 @@ def main():
     coherent_texts = random.sample(coherent_texts, sample_size)
     
     # Set the model name to your LLaMA 8B (3.1) checkpoint.
-    MODEL_NAME = "E:/Model/Llama-3.1-8B-HF"  # Update this with your actual model name or path
+    MODEL_NAME = "/mnt/onefs/scratch/jpindell2022/models/Llama-3.1-8B-HF"  # Update this with your actual model name or path
     
     # Initialize tokenizer and dataset
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
