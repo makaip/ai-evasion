@@ -96,3 +96,12 @@ This will remove all cached files and potential corrupted packages.
 ```
 conda clean --all
 ```
+
+
+
+
+
+```
+scp -r jpindell2022@athene-login.hpc.fau.edu:/mnt/beegfs/home/jpindell2022/scratch/models/Llama-3.1-8B-HF .
+
+```
