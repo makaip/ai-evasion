@@ -4,11 +4,10 @@ import nltk
 import torch
 import numpy as np
 from torch.utils.data import Dataset, DataLoader, random_split
-from transformers import BertTokenizer, BertForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, get_scheduler
+from torch.optim import AdamW
 from nltk.corpus import gutenberg, words
 from nltk.tokenize import word_tokenize
-from torch.optim import AdamW
-from torch.optim.lr_scheduler import StepLR
 from sklearn.metrics import f1_score
 import logging
 
@@ -80,7 +79,7 @@ def syntax_break(text):
     if len(words_list) > 3:
         idx = random.randint(1, len(words_list)-2)
         word = words_list[idx]
-        split_point = max(1, len(word)//2)
+        split_point = max(1, len(word) // 2)
         words_list[idx] = word[:split_point] + " " + word[split_point:]
     return " ".join(words_list)
 
@@ -143,7 +142,7 @@ class CoherenceDataset(Dataset):
         1 for naturally coherent text,
         0 for synthetically corrupted text.
     """
-    def __init__(self, coherent_texts, tokenizer, max_length=64):
+    def __init__(self, coherent_texts, tokenizer, max_length=128):
         self.samples = []
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -180,9 +179,10 @@ class CoherenceDataset(Dataset):
 # Model Training Function with Early Stopping & Scheduler
 # ----------------------------
 
-def train_model(model, dataset, epochs=30, batch_size=16, learning_rate=2e-5, patience=3):
+def train_model(model, dataset, epochs=30, batch_size=2, learning_rate=2e-5, patience=3):
     """
     Fine-tune a pretrained transformer model for the coherence classification task.
+    Note: Due to the size of LLaMA 8B, use a small batch size and consider gradient accumulation.
     """
     # Split the dataset into training and validation sets
     train_size = int(0.8 * len(dataset))
@@ -196,7 +196,10 @@ def train_model(model, dataset, epochs=30, batch_size=16, learning_rate=2e-5, pa
     model.to(device)
     
     optimizer = AdamW(model.parameters(), lr=learning_rate)
-    scheduler = StepLR(optimizer, step_size=5, gamma=0.5)
+    num_training_steps = epochs * len(train_loader)
+    lr_scheduler = get_scheduler(
+        name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
+    )
     
     best_val_acc = 0.0
     epochs_without_improvement = 0
@@ -212,6 +215,7 @@ def train_model(model, dataset, epochs=30, batch_size=16, learning_rate=2e-5, pa
             loss = outputs.loss
             loss.backward()
             optimizer.step()
+            lr_scheduler.step()
             total_loss += loss.item()
         avg_loss = total_loss / len(train_loader)
         logging.info(f"Epoch {epoch+1}/{epochs} - Training Loss: {avg_loss:.4f}")
@@ -245,8 +249,6 @@ def train_model(model, dataset, epochs=30, batch_size=16, learning_rate=2e-5, pa
             if epochs_without_improvement >= patience:
                 logging.info("Early stopping triggered.")
                 break
-        
-        scheduler.step()
 
 # ----------------------------
 # Main Execution
@@ -257,10 +259,11 @@ def main():
     Main execution function:
       1. Loads and processes texts from multiple datasets.
       2. Constructs the dataset with both coherent and corrupted samples.
-      3. Fine-tunes a pretrained BERT model on the dataset.
+      3. Fine-tunes a pretrained LLaMA model on the dataset.
       4. Saves the fine-tuned model for later use.
     """
-    nltk.download('punkt_tab')
+    # Download additional NLTK resources if necessary
+    nltk.download('punkt')
     nltk.download('gutenberg')
     nltk.download('words')
 
@@ -270,18 +273,25 @@ def main():
     sample_size = min(1000, len(coherent_texts))
     coherent_texts = random.sample(coherent_texts, sample_size)
     
+    # Set the model name to your LLaMA 8B (3.1) checkpoint.
+    MODEL_NAME = "E:/Model/Llama-3.1-8B-HF"  # Update this with your actual model name or path
+    
     # Initialize tokenizer and dataset
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    dataset = CoherenceDataset(coherent_texts, tokenizer, max_length=64)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    dataset = CoherenceDataset(coherent_texts, tokenizer, max_length=128)
     
     # Initialize model for binary sequence classification
-    model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=2)
+    model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=2)
+    
+    # Optional: Enable gradient checkpointing to save memory during fine-tuning.
+    model.gradient_checkpointing_enable()
     
     # Train the model
-    train_model(model, dataset, epochs=30, batch_size=16, learning_rate=2e-5, patience=3)
+    # Note: Batch size is set low due to the large size of LLaMA 8B.
+    train_model(model, dataset, epochs=30, batch_size=2, learning_rate=2e-5, patience=3)
     
     # Save the fine-tuned model and tokenizer for reproducibility and future use
-    model_save_path = "unsupervised_coherence_model"
+    model_save_path = "unsupervised_coherence_llama8b"
     model.save_pretrained(model_save_path)
     tokenizer.save_pretrained(model_save_path)
     logging.info(f"Training complete. Model saved to '{model_save_path}'.")

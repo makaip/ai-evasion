@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=incoherent_ai
+#SBATCH --job-name=incoherent_ai_llama
 #SBATCH --output=output.txt
 #SBATCH --error=error.txt
 #SBATCH --ntasks=1
