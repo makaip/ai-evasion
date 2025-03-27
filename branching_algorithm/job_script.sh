@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=incoherent_ai_llama
+#SBATCH --job-name=ollama_sampling
 #SBATCH --output=output.txt
 #SBATCH --error=error.txt
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
+#SBATCH --mem=32G
 #SBATCH --time=05:30:00
 #SBATCH --partition=shortq7-gpu
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:1
 
 # Display job details
 scontrol show job $SLURM_JOB_ID
@@ -15,6 +15,7 @@ scontrol show job $SLURM_JOB_ID
 # Load required modules
 module load cuda/12.4.0-gcc-13.2.0-shyinv2
 module load cudnn/8.9.7.29-12-gcc-13.2.0-vpzj2v4
+module load ollama/0.4.2-gcc-13.2.0-7tjvakl
 module load anaconda3/2023.09-0-gcc-13.2.0-dmzia4k
 
 # Set environment name
@@ -26,14 +27,8 @@ conda activate "$ENV_NAME"
 
 # Debug: Check installed package versions
 echo "Installed package versions:"
-python -c "import torch, transformers, nltk, numpy, sklearn, tqdm; \
-           print(f'PyTorch: {torch.__version__}, Transformers: {transformers.__version__}, \
-           NLTK: {nltk.__version__}, NumPy: {numpy.__version__}, \
-           Scikit-learn: {sklearn.__version__}, tqdm: {tqdm.__version__}')"
-
-echo "Checking cuDNN installation..."
-ls -l /usr/local/cuda/lib64/libcudnn*
-python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'cuDNN Available: {torch.backends.cudnn.is_available()}')"
+python -c "import torch, json, random; \
+           print(f'PyTorch: {torch.__version__}, JSON: {json.__name__}, Random: {random.__name__}')"
 
 # Verify GPU availability
 echo "Checking GPU availability..."
