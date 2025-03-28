@@ -1,22 +1,21 @@
 #!/bin/bash
 #SBATCH --job-name=ollama_sampling
-#SBATCH --output=output.txt
-#SBATCH --error=error.txt
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --time=05:30:00
-#SBATCH --partition=shortq7-gpu
-#SBATCH --gres=gpu:4
+#SBATCH --partition=shortq7-gpu   # Partition name
+#SBATCH --gres=gpu:4              # Number of GPUs
+#SBATCH --ntasks=1                # Number of tasks
+#SBATCH --cpus-per-task=4         # Number of CPU cores
+#SBATCH --mem=64G                 # Memory allocation
+#SBATCH --output=slurm-%j.out     # Standard output log
+#SBATCH --error=slurm-%j.err      # Error log file
 
 # Display job details
 scontrol show job $SLURM_JOB_ID
 
 # Load required modules
+module load anaconda3/2023.09-0-gcc-13.2.0-dmzia4k
 module load cuda/12.4.0-gcc-13.2.0-shyinv2
 module load cudnn/8.9.7.29-12-gcc-13.2.0-vpzj2v4
 module load ollama/0.4.2-gcc-13.2.0-7tjvakl
-module load anaconda3/2023.09-0-gcc-13.2.0-dmzia4k
 
 # Set environment name
 ENV_NAME="aidetection"
@@ -38,9 +37,18 @@ python -c "import torch; \
            print(f'GPU Count: {torch.cuda.device_count()}'); \
            print(f'Current GPU: {torch.cuda.get_device_name(0)}' if torch.cuda.is_available() else 'No GPU detected.')"
 
+# Start Ollama server in the background
+echo "Starting Ollama server..."
+ollama serve &
+sleep 5  # Give it some time to initialize
+
+# Verify Ollama is running
+echo "Checking if Ollama is running..."
+python3 -c 'import requests; print("Ollama is running." if requests.get("http://localhost:11434/api/tags").status_code == 200 else "Ollama not responding.")'
+
 # Run the Python script with error handling
 echo "Running Python script..."
-python3 /mnt/beegfs/home/jpindell2022/projects/aiouri/ai-evasion/coherence_prediction/main.py
+python3 /mnt/beegfs/home/jpindell2022/projects/aiouri/ai-evasion/branching_algorithm/main.py
 status=$?
 
 if [ $status -ne 0 ]; then

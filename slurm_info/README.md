@@ -74,9 +74,6 @@ python -c "import nltk, torch, numpy, transformers; print('All packages installe
 
 ## Troubleshooting
 
-
-
-
 sbatch: error: Batch script contains DOS line breaks (\r\n)
 
 ```
@@ -98,10 +95,30 @@ conda clean --all
 ```
 
 
-
-
+## Data Transfer
 
 ```
 scp -r jpindell2022@athene-login.hpc.fau.edu:/mnt/beegfs/home/jpindell2022/scratch/models/Llama-3.1-8B-HF .
 
+```
+
+
+ idk asjflskdf
+
+start a session on shortq7-gpu partition with 2 GPUs and 20GB of memory
+
+```
+srun --ntasks=1 --cpus-per-task=8 --gres=gpu:2 --mem=20G --time=06:00:00 --partition=shortq7-gpu --pty bash
+```
+
+get info on job 94566
+
+```
+scontrol show jobid -dd 94566
+```
+
+```
+squeue --job 94823
+squeue --priority | awk 'NR==1 || $1==94823 || NR==FNR{print}'
+squeue --state=PENDING --sort=P | awk '{print $1}' | grep -B10000 94823 | wc -l
 ```

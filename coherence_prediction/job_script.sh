@@ -1,13 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=incoherent_ai_llama
-#SBATCH --output=output.txt
-#SBATCH --error=error.txt
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --time=05:30:00
-#SBATCH --partition=shortq7-gpu
-#SBATCH --gres=gpu:4
+#SBATCH --partition=shortq7-gpu   # Partition name
+#SBATCH --gres=gpu:4              # Number of GPUs
+#SBATCH --ntasks=1                # Number of tasks
+#SBATCH --cpus-per-task=4         # Number of CPU cores
+#SBATCH --mem=64G                 # Memory allocation
+#SBATCH --output=slurm-%j.out     # Standard output log
+#SBATCH --error=slurm-%j.err      # Error log file
 
 # Display job details
 scontrol show job $SLURM_JOB_ID
