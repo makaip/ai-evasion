@@ -1,3 +1,4 @@
+import os
 import random
 import re
 import nltk
@@ -10,6 +11,11 @@ from nltk.corpus import gutenberg, words
 from nltk.tokenize import word_tokenize
 from sklearn.metrics import f1_score
 import logging
+import wikipedia  # New import for Wikipedia sourcing
+from torch.cuda.amp import autocast, GradScaler  # For mixed precision training
+
+# Set the environment variable to reduce fragmentation (should be set before CUDA initialization)
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 # Set up logging for detailed experiment-level information
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -49,16 +55,29 @@ def load_gutenberg_texts():
         texts.extend(segments)
     return texts
 
-def load_wikipedia_texts():
+def load_wikipedia_texts(num_articles=10):
     """
-    Placeholder for loading texts from Wikipedia.
-    You can use libraries like 'wikipedia' or process a Wikipedia dump.
-    For now, this returns an empty list.
+    Load texts from Wikipedia by fetching a set of random articles.
     """
-    logging.info("Loading Wikipedia texts... (this is a placeholder)")
-    texts = []
-    # TODO: Implement Wikipedia text extraction and segmentation.
-    return texts
+    logging.info("Loading Wikipedia texts...")
+    segments = []
+    try:
+        titles = wikipedia.random(num_articles)
+        if not isinstance(titles, list):
+            titles = [titles]
+        for title in titles:
+            try:
+                logging.info(f"Processing Wikipedia page: {title}...")
+                page = wikipedia.page(title)
+                content = page.content
+                segs = extract_segments(content)
+                segments.extend(segs)
+            except Exception as e:
+                logging.warning(f"Could not process Wikipedia page '{title}': {e}")
+    except Exception as e:
+        logging.warning(f"Error fetching Wikipedia random pages: {e}")
+    logging.info(f"Extracted {len(segments)} segments from Wikipedia.")
+    return segments
 
 def load_additional_datasets():
     """
@@ -66,7 +85,6 @@ def load_additional_datasets():
     """
     texts = load_gutenberg_texts()
     texts += load_wikipedia_texts()
-    # Add more sources as needed.
     logging.info(f"Total dataset size: {len(texts)} segments.")
     return texts
 
@@ -118,9 +136,7 @@ def reorder_structure(text):
 def backtranslation(text):
     """
     Placeholder for backtranslation.
-    In practice, you'd use an API or pre-trained model to translate text to another language and back.
     """
-    # TODO: Integrate with a translation API or model.
     return text  # For now, no change is made.
 
 def corrupt_text(text):
@@ -142,7 +158,7 @@ class CoherenceDataset(Dataset):
         1 for naturally coherent text,
         0 for synthetically corrupted text.
     """
-    def __init__(self, coherent_texts, tokenizer, max_length=128):
+    def __init__(self, coherent_texts, tokenizer, max_length=64):
         self.samples = []
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -176,15 +192,13 @@ class CoherenceDataset(Dataset):
         return item
 
 # ----------------------------
-# Model Training Function with Early Stopping & Scheduler
+# Model Training Function with Mixed Precision, Early Stopping & Scheduler
 # ----------------------------
 
-def train_model(model, dataset, epochs=30, batch_size=2, learning_rate=2e-5, patience=3):
+def train_model(model, dataset, epochs=30, batch_size=1, learning_rate=2e-5, patience=3):
     """
     Fine-tune a pretrained transformer model for the coherence classification task.
-    Note: Due to the size of LLaMA 8B, use a small batch size and consider gradient accumulation.
     """
-    # Split the dataset into training and validation sets
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
@@ -201,6 +215,7 @@ def train_model(model, dataset, epochs=30, batch_size=2, learning_rate=2e-5, pat
         name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
     )
     
+    scaler = GradScaler()
     best_val_acc = 0.0
     epochs_without_improvement = 0
     
@@ -211,12 +226,16 @@ def train_model(model, dataset, epochs=30, batch_size=2, learning_rate=2e-5, pat
         for batch in train_loader:
             optimizer.zero_grad()
             batch = {k: v.to(device) for k, v in batch.items()}
-            outputs = model(**batch)
-            loss = outputs.loss
-            loss.backward()
-            optimizer.step()
+            with autocast():
+                outputs = model(**batch)
+                loss = outputs.loss
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             lr_scheduler.step()
             total_loss += loss.item()
+            torch.cuda.empty_cache()  # Clear cache to reduce fragmentation
+
         avg_loss = total_loss / len(train_loader)
         logging.info(f"Epoch {epoch+1}/{epochs} - Training Loss: {avg_loss:.4f}")
         
@@ -240,7 +259,6 @@ def train_model(model, dataset, epochs=30, batch_size=2, learning_rate=2e-5, pat
         f1 = f1_score(all_labels, all_preds, average='binary')
         logging.info(f"Epoch {epoch+1} - Validation Accuracy: {val_acc:.4f}, F1 Score: {f1:.4f}")
         
-        # Early stopping check
         if val_acc > best_val_acc:
             best_val_acc = val_acc
             epochs_without_improvement = 0
@@ -249,6 +267,7 @@ def train_model(model, dataset, epochs=30, batch_size=2, learning_rate=2e-5, pat
             if epochs_without_improvement >= patience:
                 logging.info("Early stopping triggered.")
                 break
+        torch.cuda.empty_cache()  # Clear cache after each epoch
 
 # ----------------------------
 # Main Execution
@@ -262,35 +281,26 @@ def main():
       3. Fine-tunes a pretrained LLaMA model on the dataset.
       4. Saves the fine-tuned model for later use.
     """
-    # Download additional NLTK resources if necessary
     nltk.download('punkt')
     nltk.download('gutenberg')
     nltk.download('words')
 
     logging.info("Loading and processing texts from multiple datasets...")
     coherent_texts = load_additional_datasets()
-    # Optionally sample a subset for efficiency; increase sample size for full-scale experiments.
     sample_size = min(1000, len(coherent_texts))
     coherent_texts = random.sample(coherent_texts, sample_size)
     
-    # Set the model name to your LLaMA 8B (3.1) checkpoint.
-    MODEL_NAME = "/mnt/onefs/scratch/jpindell2022/models/Llama-3.1-8B-HF"  # Update this with your actual model name or path
+    MODEL_NAME = "/mnt/onefs/scratch/jpindell2022/models/Llama-3.1-8B-HF"  # Update with your actual model path
     
-    # Initialize tokenizer and dataset
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    dataset = CoherenceDataset(coherent_texts, tokenizer, max_length=128)
+    dataset = CoherenceDataset(coherent_texts, tokenizer, max_length=64)
     
-    # Initialize model for binary sequence classification
     model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=2)
     
-    # Optional: Enable gradient checkpointing to save memory during fine-tuning.
     model.gradient_checkpointing_enable()
     
-    # Train the model
-    # Note: Batch size is set low due to the large size of LLaMA 8B.
-    train_model(model, dataset, epochs=30, batch_size=2, learning_rate=2e-5, patience=3)
+    train_model(model, dataset, epochs=30, batch_size=1, learning_rate=2e-5, patience=3)
     
-    # Save the fine-tuned model and tokenizer for reproducibility and future use
     model_save_path = "unsupervised_coherence_llama8b"
     model.save_pretrained(model_save_path)
     tokenizer.save_pretrained(model_save_path)

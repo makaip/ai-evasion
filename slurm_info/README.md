@@ -77,7 +77,7 @@ python -c "import nltk, torch, numpy, transformers; print('All packages installe
 sbatch: error: Batch script contains DOS line breaks (\r\n)
 
 ```
-sed -i 's/\r//' job_script.sh
+sed -i 's/\r//' 
 ```
 
 ### Total Reset
@@ -121,4 +121,17 @@ scontrol show jobid -dd 94566
 squeue --job 94823
 squeue --priority | awk 'NR==1 || $1==94823 || NR==FNR{print}'
 squeue --state=PENDING --sort=P | awk '{print $1}' | grep -B10000 94823 | wc -l
+```
+
+
+```
+
+module load ollama/0.4.2-gcc-13.2.0-7tjvakl
+
+ollama serve &
+export OLLAMA_HOME=/mnt/beegfs/home/jpindell2022/scratch/ollama
+ollama pull llama3.3:70b
+ollama run llama3.3:70b
+
+
 ```
