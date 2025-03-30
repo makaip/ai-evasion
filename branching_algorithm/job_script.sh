@@ -37,7 +37,16 @@ python -c "import torch; \
            print(f'GPU Count: {torch.cuda.device_count()}'); \
            print(f'Current GPU: {torch.cuda.get_device_name(0)}' if torch.cuda.is_available() else 'No GPU detected.')"
 
-ollama list
+# Set environment variables
+export ENV_NAME="aidetection"
+export OLLAMA_HOME="/mnt/beegfs/home/jpindell2022/scratch/ollama"
+export OLLAMA_MODELS="$OLLAMA_HOME"
+
+# Persist environment variables
+echo 'export OLLAMA_HOME="/mnt/beegfs/home/jpindell2022/scratch/ollama"' >> ~/.bashrc
+echo 'export OLLAMA_MODELS="/mnt/beegfs/home/jpindell2022/scratch/ollama"' >> ~/.bashrc
+source ~/.bashrc
+
 
 # Start Ollama server in the background
 echo "Starting Ollama server..."
@@ -47,6 +56,8 @@ sleep 5  # Give it some time to initialize
 # Verify Ollama is running
 echo "Checking if Ollama is running..."
 python3 -c 'import requests; print("Ollama is running." if requests.get("http://localhost:11434/api/tags").status_code == 200 else "Ollama not responding.")'
+
+ollama list
 
 # Run the Python script with error handling
 echo "Running Python script..."

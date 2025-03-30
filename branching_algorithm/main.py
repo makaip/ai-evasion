@@ -19,7 +19,7 @@ def generate_next_tokens(prefix, step_size=2, top_k=4, top_p=0.9):
     Generate multiple token continuations from the prefix using Ollama.
     """
     response = ollama.generate(
-        model="llama3.2:70b",
+        model="llama3:70b",
         prompt=prefix,
         options={"num_predict": step_size, "top_k": top_k, "top_p": top_p}
     )
