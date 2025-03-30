@@ -37,6 +37,8 @@ python -c "import torch; \
            print(f'GPU Count: {torch.cuda.device_count()}'); \
            print(f'Current GPU: {torch.cuda.get_device_name(0)}' if torch.cuda.is_available() else 'No GPU detected.')"
 
+ollama list
+
 # Start Ollama server in the background
 echo "Starting Ollama server..."
 ollama serve &

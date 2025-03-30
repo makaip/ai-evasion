@@ -41,11 +41,12 @@ python -c "import torch; \
 echo "Installing Ollama thing idk brughsdhksdfj h"
 
 export OLLAMA_HOME=/mnt/beegfs/home/jpindell2022/scratch/ollama
-ollama pull llama3.3:70b
-ollama run llama3.3:70b
+echo $OLLAMA_HOME
+
+ollama pull llama3.2:70b --verbose
+ollama list
 
 ollama serve &
-
 echo "it wokred"
 
 delay 30
