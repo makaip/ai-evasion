@@ -3,9 +3,12 @@
 # AI Detection
 
 ```
-scontrol update JobId=94955 MailUser=@ MailType=ALL
+scontrol update JobId=95100 MailUser=jpindell2022@fau.edu MailType=ALL
 ```
 
+```
+ssh jpindell2022@athene-login.hpc.fau.edu
+```
 
 To run the stuff idk
 

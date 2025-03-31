@@ -16,6 +16,18 @@ module load cuda/12.4.0-gcc-13.2.0-shyinv2
 module load cudnn/8.9.7.29-12-gcc-13.2.0-vpzj2v4
 module load anaconda3/2023.09-0-gcc-13.2.0-dmzia4k
 
+module list
+echo "CUDNN_ROOT is: " $CUDNN_ROOT
+echo "LD_LIBRARY_PATH: " $LD_LIBRARY_PATH
+
+# Optionally, export the cuDNN lib path explicitly if CUDNN_ROOT is set
+if [ -n "$CUDNN_ROOT" ]; then
+    export LD_LIBRARY_PATH=$CUDNN_ROOT/lib64:$LD_LIBRARY_PATH
+fi
+
+# For safety, also ensure /usr/local/cuda/lib64 is in LD_LIBRARY_PATH:
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
 # Set environment name
 ENV_NAME="aidetection"
 
@@ -32,7 +44,10 @@ python -c "import torch, transformers, nltk, numpy, sklearn, tqdm; \
 
 echo "Checking cuDNN installation..."
 ls -l /usr/local/cuda/lib64/libcudnn*
-python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'cuDNN Available: {torch.backends.cudnn.is_available()}')"
+python -c "import torch; \
+           print(f'CUDA Available: {torch.cuda.is_available()}'); \
+           print(f'cuDNN Available: {torch.backends.cudnn.is_available()}'); \
+           print(f'cuDNN version: {torch.backends.cudnn.version()}')"
 
 # Verify GPU availability
 echo "Checking GPU availability..."

@@ -4,8 +4,9 @@ import re
 import nltk
 import torch
 import numpy as np
+import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader, random_split
-from transformers import AutoTokenizer, AutoModelForCausalLM, get_scheduler
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, get_scheduler
 from torch.optim import AdamW
 from nltk.corpus import gutenberg, words
 from nltk.tokenize import word_tokenize
@@ -122,7 +123,12 @@ def train_model(model, dataset, epochs=10, batch_size=1, learning_rate=2e-5, pat
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    if torch.cuda.device_count() > 1:
+        logging.info(f"Using {torch.cuda.device_count()} GPUs!")
+        model = nn.DataParallel(model)  # Enable multi-GPU
     model.to(device)
+    
     optimizer = AdamW(model.parameters(), lr=learning_rate)
     lr_scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=epochs * len(train_loader))
     scaler = GradScaler()
@@ -143,6 +149,7 @@ def train_model(model, dataset, epochs=10, batch_size=1, learning_rate=2e-5, pat
             lr_scheduler.step()
             total_loss += loss.item()
             torch.cuda.empty_cache()
+
         logging.info(f"Epoch {epoch+1}/{epochs} - Training Loss: {total_loss/len(train_loader):.4f}")
         model.eval()
         correct, total = 0, 0
@@ -171,7 +178,8 @@ def main():
     tokenizer.pad_token = tokenizer.eos_token
     coherent_texts = random.sample(load_gutenberg_texts() + load_wikipedia_texts(), min(1000, len(load_gutenberg_texts())))
     dataset = CoherenceDataset(coherent_texts, tokenizer)
-    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
+    # Use a sequence classification model for binary classification
+    model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=2)
     train_model(model, dataset, epochs=10, batch_size=1, learning_rate=2e-5, patience=3)
     model.save_pretrained("coherence_model_opt2.7b")
     tokenizer.save_pretrained("coherence_model_opt2.7b")

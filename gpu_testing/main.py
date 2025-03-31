@@ -14,3 +14,4 @@ with open('gpu_info.txt', 'w') as file:
     file.write(nvidia_smi_output + "\n")
     file.write(f"PyTorch CUDA Available: {cuda_available}\n")
     file.write(f"Number of GPUs accessible by CUDA: {gpu_count}\n")
+
