@@ -2,6 +2,10 @@
 
 # AI Detection
 
+```
+scontrol update JobId=94955 MailUser=@ MailType=ALL
+```
+
 
 To run the stuff idk
 

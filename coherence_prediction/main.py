@@ -5,228 +5,136 @@ import nltk
 import torch
 import numpy as np
 from torch.utils.data import Dataset, DataLoader, random_split
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, get_scheduler
+from transformers import AutoTokenizer, AutoModelForCausalLM, get_scheduler
 from torch.optim import AdamW
 from nltk.corpus import gutenberg, words
 from nltk.tokenize import word_tokenize
 from sklearn.metrics import f1_score
 import logging
-import wikipedia  # New import for Wikipedia sourcing
-from torch.cuda.amp import autocast, GradScaler  # For mixed precision training
+import wikipedia
+from torch.amp import autocast, GradScaler
+import spacy
+from textblob import TextBlob
 
-# Set the environment variable to reduce fragmentation (should be set before CUDA initialization)
+# Set environment variable for CUDA memory optimization
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-# Set up logging for detailed experiment-level information
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# ----------------------------
-# Download required NLTK resources
-# ----------------------------
+# Download necessary NLTK resources
 nltk.download('gutenberg')
 nltk.download('punkt')
 nltk.download('words')
 
-# ----------------------------
-# Data Preparation Functions
-# ----------------------------
+nlp = spacy.load("en_core_web_sm")
 
 def extract_segments(text, min_tokens=10, max_tokens=20):
-    """
-    Extract contiguous token segments from a given text.
-    """
     tokens = word_tokenize(text)
-    segments = []
-    for i in range(len(tokens) - max_tokens):
-        seg = tokens[i:i+max_tokens]
-        if len(seg) >= min_tokens:
-            segments.append(" ".join(seg))
-    return segments
+    return [" ".join(tokens[i:i+max_tokens]) for i in range(len(tokens) - max_tokens) if len(tokens[i:i+max_tokens]) >= min_tokens]
 
 def load_gutenberg_texts():
-    """
-    Load texts from the Gutenberg corpus and extract segments.
-    """
     texts = []
     for fileid in gutenberg.fileids():
-        logging.info(f"Processing Gutenberg file: {fileid}...")
         raw_text = gutenberg.raw(fileid)
-        segments = extract_segments(raw_text)
-        texts.extend(segments)
+        texts.extend(extract_segments(raw_text))
     return texts
 
 def load_wikipedia_texts(num_articles=10):
-    """
-    Load texts from Wikipedia by fetching a set of random articles.
-    """
-    logging.info("Loading Wikipedia texts...")
-    segments = []
+    texts = []
     try:
         titles = wikipedia.random(num_articles)
-        if not isinstance(titles, list):
-            titles = [titles]
+        titles = [titles] if not isinstance(titles, list) else titles
         for title in titles:
             try:
-                logging.info(f"Processing Wikipedia page: {title}...")
                 page = wikipedia.page(title)
-                content = page.content
-                segs = extract_segments(content)
-                segments.extend(segs)
-            except Exception as e:
-                logging.warning(f"Could not process Wikipedia page '{title}': {e}")
-    except Exception as e:
-        logging.warning(f"Error fetching Wikipedia random pages: {e}")
-    logging.info(f"Extracted {len(segments)} segments from Wikipedia.")
-    return segments
-
-def load_additional_datasets():
-    """
-    Combine texts from multiple sources for a larger dataset.
-    """
-    texts = load_gutenberg_texts()
-    texts += load_wikipedia_texts()
-    logging.info(f"Total dataset size: {len(texts)} segments.")
+                texts.extend(extract_segments(page.content))
+            except:
+                pass
+    except:
+        pass
     return texts
 
-# ----------------------------
-# Corruption Model: Negative Sample Generation
-# ----------------------------
+def corrupt_text(text):
+    methods = [syntax_break, semantic_drift, tense_shift, nonsense_insert, reorder_structure, backtranslation]
+    return random.choice(methods)(text)
 
 def syntax_break(text):
     words_list = text.split()
     if len(words_list) > 3:
-        idx = random.randint(1, len(words_list)-2)
-        word = words_list[idx]
-        split_point = max(1, len(word) // 2)
-        words_list[idx] = word[:split_point] + " " + word[split_point:]
+        idx = random.randint(1, len(words_list) - 2)
+        words_list[idx] = words_list[idx][:len(words_list[idx])//2] + " " + words_list[idx][len(words_list[idx])//2:]
     return " ".join(words_list)
 
 def semantic_drift(text):
     words_list = text.split()
-    if not words_list:
-        return text
-    idx = random.randint(0, len(words_list)-1)
     corpus_words = [w.lower() for w in words.words() if w.isalpha() and len(w) > 2]
-    replacement = random.choice(corpus_words)
-    words_list[idx] = replacement
+    if words_list:
+        words_list[random.randint(0, len(words_list)-1)] = random.choice(corpus_words)
     return " ".join(words_list)
 
 def tense_shift(text):
-    text = re.sub(r'\b(is|are|am)\b', 'was', text)
-    text = re.sub(r'\b(runs)\b', 'ran', text)
-    text = re.sub(r'\b(eats)\b', 'ate', text)
-    return text
+    """
+    Convert present-tense verbs to past tense using TextBlob.
+    """
+    blob = TextBlob(text)
+    converted = []
+    
+    for word, tag in blob.tags:
+        if tag.startswith("VB"):  # Identifies verbs
+            past_tense = word + "ed" if not word.endswith("e") else word + "d"  # Basic heuristic
+            converted.append(past_tense)
+        else:
+            converted.append(word)
+    
+    return " ".join(converted)
 
-def nonsense_insert(text, num_words_range=(3, 7)):
+def nonsense_insert(text):
     words_list = text.split()
-    num_words = random.randint(*num_words_range)
-    corpus_words = [w.lower() for w in words.words() if w.isalpha() and len(w) > 2]
-    inserted_words = " ".join(random.choices(corpus_words, k=num_words))
-    idx = random.randint(0, len(words_list))
-    words_list.insert(idx, inserted_words)
+    words_list.insert(random.randint(0, len(words_list)), " ".join(random.choices(words.words(), k=random.randint(3, 7))))
     return " ".join(words_list)
 
 def reorder_structure(text):
     words_list = text.split()
-    if len(words_list) < 6:
-        return text
-    mid = len(words_list) // 2
-    return " ".join(words_list[mid:] + words_list[:mid])
+    return " ".join(words_list[len(words_list)//2:] + words_list[:len(words_list)//2]) if len(words_list) >= 6 else text
 
 def backtranslation(text):
-    """
-    Placeholder for backtranslation.
-    """
-    return text  # For now, no change is made.
-
-def corrupt_text(text):
-    """
-    Apply one of several corruption strategies.
-    """
-    corruption_methods = [syntax_break, semantic_drift, tense_shift, nonsense_insert, reorder_structure, backtranslation]
-    method = random.choice(corruption_methods)
-    return method(text)
-
-# ----------------------------
-# Dataset Definition
-# ----------------------------
+    return text  # Placeholder for future backtranslation logic
 
 class CoherenceDataset(Dataset):
-    """
-    Dataset for Predictive Coherence Assessment.
-    Each sample consists of a text segment and a binary label:
-        1 for naturally coherent text,
-        0 for synthetically corrupted text.
-    """
     def __init__(self, coherent_texts, tokenizer, max_length=64):
-        self.samples = []
         self.tokenizer = tokenizer
-        self.max_length = max_length
-
-        # Positive examples: naturally coherent segments (label = 1)
-        for text in coherent_texts:
-            self.samples.append((text, 1))
-        
-        # Negative examples: synthetically corrupted segments (label = 0)
-        for text in coherent_texts:
-            corrupted = corrupt_text(text)
-            self.samples.append((corrupted, 0))
-        
+        self.samples = [(text, 1) for text in coherent_texts] + [(corrupt_text(text), 0) for text in coherent_texts]
         random.shuffle(self.samples)
-    
+
     def __len__(self):
         return len(self.samples)
-    
+
     def __getitem__(self, idx):
         text, label = self.samples[idx]
-        encoding = self.tokenizer.encode_plus(
-            text,
-            add_special_tokens=True,
-            truncation=True,
-            max_length=self.max_length,
-            padding='max_length',
-            return_tensors="pt"
-        )
-        item = {key: val.squeeze(0) for key, val in encoding.items()}
-        item["labels"] = torch.tensor(label, dtype=torch.long)
-        return item
+        encoding = self.tokenizer(text, truncation=True, padding='max_length', max_length=64, return_tensors='pt')
+        encoding = {key: val.squeeze(0) for key, val in encoding.items()}
+        encoding['labels'] = torch.tensor(label, dtype=torch.long)
+        return encoding
 
-# ----------------------------
-# Model Training Function with Mixed Precision, Early Stopping & Scheduler
-# ----------------------------
-
-def train_model(model, dataset, epochs=30, batch_size=1, learning_rate=2e-5, patience=3):
-    """
-    Fine-tune a pretrained transformer model for the coherence classification task.
-    """
+def train_model(model, dataset, epochs=10, batch_size=1, learning_rate=2e-5, patience=3):
     train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-    
+    train_dataset, val_dataset = random_split(dataset, [train_size, len(dataset) - train_size])
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
-    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-    
     optimizer = AdamW(model.parameters(), lr=learning_rate)
-    num_training_steps = epochs * len(train_loader)
-    lr_scheduler = get_scheduler(
-        name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
-    )
-    
+    lr_scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=epochs * len(train_loader))
     scaler = GradScaler()
-    best_val_acc = 0.0
-    epochs_without_improvement = 0
-    
-    logging.info("Starting training...")
+    best_val_acc, epochs_without_improvement = 0.0, 0
+
     for epoch in range(epochs):
         model.train()
         total_loss = 0
         for batch in train_loader:
             optimizer.zero_grad()
             batch = {k: v.to(device) for k, v in batch.items()}
-            with autocast():
+            with autocast("cuda"):
                 outputs = model(**batch)
                 loss = outputs.loss
             scaler.scale(loss).backward()
@@ -234,31 +142,19 @@ def train_model(model, dataset, epochs=30, batch_size=1, learning_rate=2e-5, pat
             scaler.update()
             lr_scheduler.step()
             total_loss += loss.item()
-            torch.cuda.empty_cache()  # Clear cache to reduce fragmentation
-
-        avg_loss = total_loss / len(train_loader)
-        logging.info(f"Epoch {epoch+1}/{epochs} - Training Loss: {avg_loss:.4f}")
-        
-        # Evaluate on validation set
+            torch.cuda.empty_cache()
+        logging.info(f"Epoch {epoch+1}/{epochs} - Training Loss: {total_loss/len(train_loader):.4f}")
         model.eval()
-        correct = 0
-        total = 0
-        all_preds = []
-        all_labels = []
+        correct, total = 0, 0
         with torch.no_grad():
             for batch in val_loader:
                 batch = {k: v.to(device) for k, v in batch.items()}
                 outputs = model(**batch)
                 predictions = torch.argmax(outputs.logits, dim=-1)
-                labels = batch["labels"]
-                all_preds.extend(predictions.cpu().numpy())
-                all_labels.extend(labels.cpu().numpy())
-                correct += (predictions == labels).sum().item()
-                total += labels.size(0)
+                correct += (predictions == batch["labels"]).sum().item()
+                total += batch["labels"].size(0)
         val_acc = correct / total
-        f1 = f1_score(all_labels, all_preds, average='binary')
-        logging.info(f"Epoch {epoch+1} - Validation Accuracy: {val_acc:.4f}, F1 Score: {f1:.4f}")
-        
+        logging.info(f"Epoch {epoch+1} - Validation Accuracy: {val_acc:.4f}")
         if val_acc > best_val_acc:
             best_val_acc = val_acc
             epochs_without_improvement = 0
@@ -267,44 +163,19 @@ def train_model(model, dataset, epochs=30, batch_size=1, learning_rate=2e-5, pat
             if epochs_without_improvement >= patience:
                 logging.info("Early stopping triggered.")
                 break
-        torch.cuda.empty_cache()  # Clear cache after each epoch
-
-# ----------------------------
-# Main Execution
-# ----------------------------
+        torch.cuda.empty_cache()
 
 def main():
-    """
-    Main execution function:
-      1. Loads and processes texts from multiple datasets.
-      2. Constructs the dataset with both coherent and corrupted samples.
-      3. Fine-tunes a pretrained LLaMA model on the dataset.
-      4. Saves the fine-tuned model for later use.
-    """
-    nltk.download('punkt')
-    nltk.download('gutenberg')
-    nltk.download('words')
-
-    logging.info("Loading and processing texts from multiple datasets...")
-    coherent_texts = load_additional_datasets()
-    sample_size = min(1000, len(coherent_texts))
-    coherent_texts = random.sample(coherent_texts, sample_size)
-    
-    MODEL_NAME = "/mnt/onefs/scratch/jpindell2022/models/Llama-3.1-8B-HF"  # Update with your actual model path
-    
+    MODEL_NAME = "/mnt/beegfs/home/jpindell2022/scratch/models/Opt-2.7b-HF"
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    dataset = CoherenceDataset(coherent_texts, tokenizer, max_length=64)
-    
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=2)
-    
-    model.gradient_checkpointing_enable()
-    
-    train_model(model, dataset, epochs=30, batch_size=1, learning_rate=2e-5, patience=3)
-    
-    model_save_path = "unsupervised_coherence_llama8b"
-    model.save_pretrained(model_save_path)
-    tokenizer.save_pretrained(model_save_path)
-    logging.info(f"Training complete. Model saved to '{model_save_path}'.")
+    tokenizer.pad_token = tokenizer.eos_token
+    coherent_texts = random.sample(load_gutenberg_texts() + load_wikipedia_texts(), min(1000, len(load_gutenberg_texts())))
+    dataset = CoherenceDataset(coherent_texts, tokenizer)
+    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
+    train_model(model, dataset, epochs=10, batch_size=1, learning_rate=2e-5, patience=3)
+    model.save_pretrained("coherence_model_opt2.7b")
+    tokenizer.save_pretrained("coherence_model_opt2.7b")
+    logging.info("Training complete.")
 
 if __name__ == "__main__":
     main()

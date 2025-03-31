@@ -16,6 +16,8 @@ module load ollama/0.4.2-gcc-13.2.0-7tjvakl
 # Persist environment variables
 echo 'export OLLAMA_HOME="/mnt/beegfs/home/jpindell2022/scratch/ollama"' >> ~/.bashrc
 echo 'export OLLAMA_MODELS="/mnt/beegfs/home/jpindell2022/scratch/ollama"' >> ~/.bashrc
+echo 'export OLLAMA_USE_GPU=true' >> ~/.bashrc
+
 source ~/.bashrc
 
 # Start Ollama server in the background

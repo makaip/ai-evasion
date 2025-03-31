@@ -26,6 +26,11 @@ def generate_next_tokens(prefix, step_size=2, top_k=4, top_p=0.9):
     tokens = response["response"].strip()
     return tokens
 
+def append_to_file(filename, text):
+    """Append text to a file."""
+    with open(filename, "a") as file:
+        file.write(text + "\n")
+
 def generate_tree(prompt, tree_size, step_size=2, top_k=4, top_p=0.9):
     """
     Build a tree of continuations from the prompt.
@@ -41,6 +46,7 @@ def generate_tree(prompt, tree_size, step_size=2, top_k=4, top_p=0.9):
                 tokens = generate_next_tokens(branch, step_size=step_size, top_k=top_k, top_p=top_p)
                 candidate = branch + " " + tokens
                 candidates.append(candidate)
+                append_to_file("generation_log.txt", candidate)
             tree[branch] = candidates
             next_level.extend(candidates)
         current_level = next_level
@@ -71,9 +77,12 @@ def branch_and_trim(prompt, tree_size, step_size=2, top_k=4, top_p=0.9, n_steps=
     selected_root = trim_tree(tree)
     
     current_text = selected_root
+    append_to_file("generation_log.txt", "\nSelected Root: " + selected_root)
+    
     for _ in range(n_steps // step_size):
         tokens = generate_next_tokens(current_text, step_size=step_size, top_k=top_k, top_p=top_p)
         current_text += " " + tokens
+        append_to_file("generation_log.txt", current_text)
     
     with open("generation.txt", "w") as text_file:
         text_file.write(current_text)
@@ -81,6 +90,10 @@ def branch_and_trim(prompt, tree_size, step_size=2, top_k=4, top_p=0.9, n_steps=
     return current_text
 
 if __name__ == "__main__":
+    cuda_available = torch.cuda.is_available()
+    with open("cuda_status.txt", "w") as cuda_file:
+        cuda_file.write(f"CUDA Available: {cuda_available}\n")
+    
     prompt = "Once"
-    final_text = branch_and_trim(prompt, tree_size=4, step_size=2, top_k=5, top_p=0.25, n_steps=6)
+    final_text = branch_and_trim(prompt, tree_size=3, step_size=2, top_k=3, top_p=0.25, n_steps=3)
     print("\nFinal generated text:", final_text)
