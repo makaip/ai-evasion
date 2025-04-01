@@ -3,6 +3,11 @@
 # AI Detection
 
 ```
+/mnt/beegfs/groups/ouri_project
+```
+
+
+```
 scontrol update JobId=95100 MailUser=jpindell2022@fau.edu MailType=ALL
 ```
 
@@ -87,6 +92,13 @@ sbatch: error: Batch script contains DOS line breaks (\r\n)
 sed -i 's/\r//' 
 ```
 
+recursively for all files in current directory
+
+```
+find . -type f -exec sed -i 's/\r$//' {} +
+```
+
+
 ### Total Reset
 
 
@@ -141,4 +153,9 @@ ollama pull llama3.3:70b
 ollama run llama3.3:70b
 
 
+```
+
+```
+
+OLLAMA_MODELS=/mnt/beegfs/groups/ouri_project/ollama ollama list
 ```

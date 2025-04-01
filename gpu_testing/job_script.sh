@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=incoherent_ai_llama
+#SBATCH --job-name=llama_gpu_testing
 #SBATCH --partition=shortq7-gpu   # Partition name
 #SBATCH --gres=gpu:4              # Number of GPUs
 #SBATCH --ntasks=1                # Number of tasks

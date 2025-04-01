@@ -17,6 +17,7 @@ module load ollama/0.4.2-gcc-13.2.0-7tjvakl
 echo 'export OLLAMA_HOME="/mnt/beegfs/groups/ouri_project/ollama"' >> ~/.bashrc
 echo 'export OLLAMA_MODELS="/mnt/beegfs/groups/ouri_project/ollama"' >> ~/.bashrc
 echo 'export OLLAMA_USE_GPU=true' >> ~/.bashrc
+echo 'export CUDA_VISIBLE_DEVICES=0,1,2,3' >> ~/.bashrc
 
 source ~/.bashrc
 
@@ -58,10 +59,23 @@ python -c "import torch; \
            print(f'GPU Count: {torch.cuda.device_count()}'); \
            print(f'Current GPU: {torch.cuda.get_device_name(0)}' if torch.cuda.is_available() else 'No GPU detected.')"
 
+# Start GPU utilization logging asynchronously
+echo "Starting GPU utilization logging..."
+while true; do nvidia-smi >> gpu_logs.txt; sleep 10; done &
+GPU_LOGGER_PID=$!
+
+echo "Checking if Ollama is using GPU..."
+ollama run llama3:70b --verbose > ollama_debug.log 2>&1
+
 # Run the Python script with error handling
 echo "Running Python script..."
-python3 /mnt/beegfs/home/jpindell2022/projects/aiouri/ai-evasion/branching_algorithm/main.py
+python3 /mnt/beegfs/home/jpindell2022/projects/aiouri/ai-evasion/ollama_testing/main.py
 status=$?
+
+# Stop GPU logging
+kill $GPU_LOGGER_PID
+
+echo "GPU logging stopped."
 
 if [ $status -ne 0 ]; then
     echo "Operation failed with exit code $status"

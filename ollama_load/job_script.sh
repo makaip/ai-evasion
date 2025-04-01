@@ -4,7 +4,7 @@
 #SBATCH --partition=shortq7-gpu   # Partition name
 #SBATCH --ntasks=1                # Number of tasks
 #SBATCH --cpus-per-task=4         # Number of CPU cores
-#SBATCH --mem=64G                 # Memory allocation
+#SBATCH --mem=32G                 # Memory allocation
 #SBATCH --output=slurm-%j.out     # Standard output log
 #SBATCH --error=slurm-%j.err      # Error log file
 
@@ -20,12 +20,10 @@ module load ollama/0.4.2-gcc-13.2.0-7tjvakl
 
 # Set environment variables
 export ENV_NAME="aidetection"
-export OLLAMA_HOME="/mnt/beegfs/home/jpindell2022/scratch/ollama"
-export OLLAMA_MODELS="$OLLAMA_HOME"
 
 # Persist environment variables
-echo 'export OLLAMA_HOME="/mnt/beegfs/home/jpindell2022/scratch/ollama"' >> ~/.bashrc
-echo 'export OLLAMA_MODELS="/mnt/beegfs/home/jpindell2022/scratch/ollama"' >> ~/.bashrc
+echo 'export OLLAMA_HOME="/mnt/beegfs/groups/ouri_project/ollama"' >> ~/.bashrc
+echo 'export OLLAMA_MODELS="/mnt/beegfs/groups/ouri_project/ollama"' >> ~/.bashrc
 source ~/.bashrc
 
 # Activate the Conda environment
