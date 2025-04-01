@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=coherence_training
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=4
-#SBATCH --cpus-per-task=8
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=64
 #SBATCH --gres=gpu:4
 #SBATCH --mem=100G
 #SBATCH --output=slurm-%j.out
