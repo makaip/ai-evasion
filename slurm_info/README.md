@@ -79,6 +79,7 @@ conda activate aidetection
 Install Packages*
 
 ```
+conda install -c nvidia cudnn
 conda install pytorch numpy scikit-learn tqdm -c pytorch
 pip install transformers nltk datasets && python -m nltk.downloader punkt words gutenberg
 python -c "import nltk, torch, numpy, transformers; print('All packages installed successfully')"

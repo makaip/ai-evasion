@@ -57,6 +57,8 @@ python -c "import torch; \
            print(f'GPU Count: {torch.cuda.device_count()}'); \
            print(f'Current GPU: {torch.cuda.get_device_name(0)}' if torch.cuda.is_available() else 'No GPU detected.')"
 
+nohup /mnt/beegfs/home/jpindell2022/projects/aiouri/log_gpu.sh &
+
 # Run the Python script with error handling
 echo "Running Python script..."
 python3 /mnt/beegfs/home/jpindell2022/projects/aiouri/ai-evasion/coherence_prediction/main.py
