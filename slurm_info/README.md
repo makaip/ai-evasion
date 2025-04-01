@@ -26,6 +26,7 @@ list available nodes
 
 ```
 sinfo -N -l
+sinfo -o "%N %C %G %m" -N
 sinfo -N -o "%P %N %G %c"
 squeue -o "%.18i %.9P %.20j %.8u %.8T %.10M %.10l %.6D %R"
 ```

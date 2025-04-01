@@ -20,4 +20,4 @@ source /opt/ohpc/pub/spack/opt/spack/linux-rocky8-x86_64/gcc-13.2.0/anaconda3-20
 conda activate "$ENV_NAME"
 
 # Run the training script
-srun python /mnt/onefs/home/jpindell2022/projects/aiouri/ai-evasion/coherence_prediction/main.py
+srun python /mnt/onefs/home/jpindell2022/projects/aiouri/ai-evasion/coherence_prediction/train.py
