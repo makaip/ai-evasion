@@ -86,18 +86,8 @@ with open(dataset_path, "rb") as f:
     dataset = pickle.load(f)
 
 # Training function
-def train_model(model, dataset, epochs=3, batch_size=32):
-    # Try to catch and log the dataset structure
-    try:
-        sample_item = dataset[0]
-        logging.info(f"Rank {rank}: Dataset sample structure: {type(sample_item)}")
-        if isinstance(sample_item, tuple) and len(sample_item) == 2:
-            logging.info(f"Rank {rank}: Input type: {type(sample_item[0])}, Labels type: {type(sample_item[1])}")
-            if isinstance(sample_item[0], dict):
-                logging.info(f"Rank {rank}: Input keys: {sample_item[0].keys()}")
-    except Exception as e:
-        logging.error(f"Rank {rank}: Error inspecting dataset: {str(e)}")
-
+def train_model(model, dataset, epochs=5, batch_size=16):
+    # Split dataset with stratification if possible
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
@@ -105,14 +95,33 @@ def train_model(model, dataset, epochs=3, batch_size=32):
     if world_size > 1:
         train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank)
         train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=train_sampler, num_workers=4, pin_memory=True)
+        val_sampler = DistributedSampler(val_dataset, num_replicas=world_size, rank=rank)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, sampler=val_sampler, num_workers=4, pin_memory=True)
     else:
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
+
+    # Improved optimizer with weight decay
+    optimizer = AdamW(model.parameters(), lr=2e-5, eps=1e-8, weight_decay=0.01)
+    
+    # Better scheduler with warmup
+    total_steps = len(train_loader) * epochs
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, 
+        num_warmup_steps=int(0.1 * total_steps),
+        num_training_steps=total_steps
+    )
 
     loss_fn = nn.CrossEntropyLoss()
+    best_val_acc = 0.0
+    patience = 3
+    patience_counter = 0
 
     for epoch in range(epochs):
         model.train()
         total_loss = 0
+        correct = 0
+        total = 0
 
         if world_size > 1:
             train_sampler.set_epoch(epoch)
@@ -120,60 +129,112 @@ def train_model(model, dataset, epochs=3, batch_size=32):
         for batch_idx, batch in enumerate(train_loader):
             try:
                 inputs, labels = batch
-                
-                # Debug the batch
-                if batch_idx == 0:
-                    logging.info(f"Rank {rank}: Batch structure - inputs type: {type(inputs)}, labels type: {type(labels)}")
-                    if isinstance(inputs, dict):
-                        logging.info(f"Rank {rank}: Input keys: {inputs.keys()}")
-                        for k, v in inputs.items():
-                            logging.info(f"Rank {rank}: {k} shape: {v.shape}")
-                    logging.info(f"Rank {rank}: Labels shape: {labels.shape}")
-                
                 inputs = {k: v.to(device, non_blocking=True) for k, v in inputs.items()}
                 labels = labels.to(device, non_blocking=True)
 
                 optimizer.zero_grad()
 
-                # Use FP16 precision with device type specified
                 with autocast(device_type='cuda', dtype=torch.float16):
                     outputs = model(**inputs)
                     loss = loss_fn(outputs.logits, labels)
 
                 scaler.scale(loss).backward()
+                
+                # Gradient clipping to prevent exploding gradients
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                
                 scaler.step(optimizer)
                 scaler.update()
-
                 scheduler.step()
+                
+                # Calculate training accuracy
+                _, predicted = torch.max(outputs.logits, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+                
                 total_loss += loss.item()
 
-                # Add progress logging for each batch
-                if batch_idx % 10 == 0:  # Log every 10 batches
-                    logging.info(f"Rank {rank} - Epoch {epoch+1}, Batch {batch_idx}/{len(train_loader)}: Loss = {loss.item():.4f}")
+                if batch_idx % 10 == 0:
+                    logging.info(f"Rank {rank} - Epoch {epoch+1}, Batch {batch_idx}/{len(train_loader)}: "
+                                f"Loss = {loss.item():.4f}, Acc = {100 * correct / total:.2f}%")
             
             except Exception as e:
                 logging.error(f"Rank {rank} - Error processing batch {batch_idx}: {str(e)}")
-                # Continue with next batch instead of crashing
                 continue
 
-        avg_loss = total_loss / len(train_loader)
-        logging.info(f"Rank {rank} - Epoch {epoch+1}: Avg Loss = {avg_loss:.4f}")
+        # Validation after each epoch
+        model.eval()
+        val_loss = 0
+        val_correct = 0
+        val_total = 0
+        
+        with torch.no_grad():
+            for val_batch in val_loader:
+                try:
+                    val_inputs, val_labels = val_batch
+                    val_inputs = {k: v.to(device, non_blocking=True) for k, v in val_inputs.items()}
+                    val_labels = val_labels.to(device, non_blocking=True)
+                    
+                    with autocast(device_type='cuda', dtype=torch.float16):
+                        val_outputs = model(**val_inputs)
+                        loss = loss_fn(val_outputs.logits, val_labels)
+                    
+                    val_loss += loss.item()
+                    _, val_predicted = torch.max(val_outputs.logits, 1)
+                    val_total += val_labels.size(0)
+                    val_correct += (val_predicted == val_labels).sum().item()
+                
+                except Exception as e:
+                    logging.error(f"Rank {rank} - Error processing validation batch: {str(e)}")
+                    continue
+        
+        val_accuracy = 100 * val_correct / val_total if val_total > 0 else 0
+        avg_val_loss = val_loss / len(val_loader) if len(val_loader) > 0 else 0
+        avg_train_loss = total_loss / len(train_loader)
+        train_accuracy = 100 * correct / total if total > 0 else 0
+        
+        logging.info(f"Rank {rank} - Epoch {epoch+1}: "
+                    f"Train Loss = {avg_train_loss:.4f}, Train Acc = {train_accuracy:.2f}%, "
+                    f"Val Loss = {avg_val_loss:.4f}, Val Acc = {val_accuracy:.2f}%")
+        
+        # Early stopping with patience
+        if val_accuracy > best_val_acc:
+            best_val_acc = val_accuracy
+            patience_counter = 0
+            
+            # Save the best model
+            if rank == 0:
+                if hasattr(model, 'module'):
+                    model_to_save = model.module
+                else:
+                    model_to_save = model
+                
+                save_path = "/mnt/beegfs/home/jpindell2022/scratch/coherence_dataset/best_model_checkpoint.pt"
+                torch.save(model_to_save.state_dict(), save_path)
+                logging.info(f"Best model saved with validation accuracy: {val_accuracy:.2f}%")
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                logging.info(f"Early stopping triggered after {epoch+1} epochs")
+                break
 
-    # Save the model at the end of training (only by rank 0)
+    # Save the final model (only by rank 0)
     if rank == 0:
         if hasattr(model, 'module'):
-            model_to_save = model.module  # Get the model from the DDP wrapper
+            model_to_save = model.module
         else:
             model_to_save = model
         
-        save_path = "/mnt/beegfs/home/jpindell2022/scratch/coherence_dataset/model_checkpoint.pt"
+        save_path = "/mnt/beegfs/home/jpindell2022/scratch/coherence_dataset/final_model_checkpoint.pt"
         torch.save(model_to_save.state_dict(), save_path)
-        logging.info(f"Model saved to {save_path}")
+        logging.info(f"Final model saved to {save_path}")
+        logging.info(f"Best validation accuracy: {best_val_acc:.2f}%")
 
-    # Ensure proper cleanup
+    # Cleanup
     if world_size > 1:
         try:
-            dist.barrier()  # Synchronize before destroying process group
+            dist.barrier()
             dist.destroy_process_group()
         except Exception as e:
             logging.error(f"Rank {rank} - Error during cleanup: {str(e)}")
