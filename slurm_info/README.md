@@ -161,3 +161,24 @@ ollama run llama3.3:70b
 
 OLLAMA_MODELS=/mnt/beegfs/groups/ouri_project/ollama ollama list
 ```
+
+
+```
+/mnt/beegfs/groups/ouri_project/huggingface
+```
+
+```
+huggingface-cli download llama3.3:70b --cache-dir /mnt/beegfs/groups/ouri_project/huggingface
+```
+
+
+```
+python /mnt/beegfs/groups/ouri_project/repos/convert_llama_weights_to_hf.py   --input_dir /mnt/beegfs/groups/ouri_project/huggingface/Meta-Llama-3-70B-Instruct/   --model_size 70B   --output_dir /mnt/beegfs/groups/ouri_project/huggingface/Meta-Llama-3-70B-Instruct-HF
+```
+
+```
+from transformers import LlamaForCausalLM, LlamaTokenizer
+model = LlamaForCausalLM.from_pretrained('/mnt/beegfs/groups/ouri_project/huggingface/Meta-Llama-3-70B-Instruct-HF')
+model.save_pretrained('/mnt/beegfs/groups/ouri_project/huggingface/Meta-Llama-3-70B-Instruct-HF-SafeTensors', safe_serialization=True)
+
+```

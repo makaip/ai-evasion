@@ -11,30 +11,11 @@
 # Display job details
 scontrol show job $SLURM_JOB_ID
 
-module load ollama/0.4.2-gcc-13.2.0-7tjvakl
-
-# Persist environment variables
-echo 'export OLLAMA_HOME="/mnt/beegfs/groups/ouri_project/ollama"' >> ~/.bashrc
-echo 'export OLLAMA_MODELS="/mnt/beegfs/groups/ouri_project/ollama"' >> ~/.bashrc
-echo 'export OLLAMA_USE_GPU=true' >> ~/.bashrc
-
-source ~/.bashrc
-
-# Start Ollama server in the background
-echo "Starting Ollama server..."
-ollama serve &
-sleep 5  # Give it some time to initialize
-
-# Verify Ollama is running
-echo "Checking if Ollama is running..."
-python3 -c 'import requests; print("Ollama is running." if requests.get("http://localhost:11434/api/tags").status_code == 200 else "Ollama not responding.")'
-
-ollama list
-
 # Load required modules
 module load anaconda3/2023.09-0-gcc-13.2.0-dmzia4k
 module load cuda/12.4.0-gcc-13.2.0-shyinv2
 module load cudnn/8.9.7.29-12-gcc-13.2.0-vpzj2v4
+module load nccl/2.20.3-1-gcc-13.2.0-4a5sp6m
 
 # Set environment name
 ENV_NAME="aidetection"
